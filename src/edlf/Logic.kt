@@ -43,7 +43,7 @@ class Logic() : Components<Boolean>() {
 
 }
 
-class ProcessAlgorithm<T>(changedNode: Input<T>){
+internal class ProcessAlgorithm<T>(changedNode: Input<T>) {
     private var toProcess = mutableListOf<Component<T>>(changedNode)
     var sourcesMap = sourcesMap(changedNode)
 
@@ -54,22 +54,14 @@ class ProcessAlgorithm<T>(changedNode: Input<T>){
         }
     }
 
-    fun processWire(source: Component<T>, destination: Component<T>) {
-        sourcesMap[destination]!!.remove(source)
-    }
-
-    fun processableNode(node: Component<T>): Boolean {
-        return sourcesMap[node]!!.isEmpty()
-    }
-
-    fun processNode(node: Component<T>): Collection<Component<T>>{
+    private fun processNode(node: Component<T>): Collection<Component<T>> {
         var changedComponents = mutableListOf<Component<T>>()
-        for (child in node.dependedComponents()){
+        for (child in node.dependedComponents()) {
             processWire(node, child)
             if (processableNode(child)) {
-                if (child.update()){
+                if (child.update()) {
                     changedComponents.add(child)
-                }else{
+                } else {
                     processAllWire(child)
                 }
             }
@@ -77,7 +69,15 @@ class ProcessAlgorithm<T>(changedNode: Input<T>){
         return changedComponents
     }
 
-    fun processAllWire(node: Component<T>) {
+    private fun processWire(source: Component<T>, destination: Component<T>) {
+        sourcesMap[destination]!!.remove(source)
+    }
+
+    private fun processableNode(node: Component<T>): Boolean {
+        return sourcesMap[node]!!.isEmpty()
+    }
+
+    private fun processAllWire(node: Component<T>) {
         node.allWires().map {
             pair ->
             var (source, dest) = pair
@@ -85,7 +85,7 @@ class ProcessAlgorithm<T>(changedNode: Input<T>){
         }
     }
 
-    private fun sourcesMap(node: Component<T>) : MutableMap<Component<T>, MutableSet<Component<T>>> {
+    private fun sourcesMap(node: Component<T>): MutableMap<Component<T>, MutableSet<Component<T>>> {
         var sourcesMap = mutableMapOf<Component<T>, MutableSet<Component<T>>>()
         node.allWires().map {
             wire ->
@@ -97,7 +97,6 @@ class ProcessAlgorithm<T>(changedNode: Input<T>){
         }
         return sourcesMap
     }
-
 }
 
 abstract class Component<T>(var owner: Components<T>, inputs: List<Component<T>>) {
@@ -111,23 +110,27 @@ abstract class Component<T>(var owner: Components<T>, inputs: List<Component<T>>
 
     constructor(owner: Components<T>, vararg inputs: Component<T>) : this(owner, inputs.asList())
 
-    protected var state = logic()
-
-    abstract fun logic(): T
-
     fun value(): T {
         return state
     }
 
-    fun dependedComponents(): Collection<Component<T>>{
+    fun dependedComponents(): Collection<Component<T>> {
         return node.outputs()
     }
 
-    fun allWires(): Collection<Pair<Component<T>,Component<T>>>{
+    internal fun allWires(): Collection<Pair<Component<T>, Component<T>>> {
         return node.bfsEdges()
     }
 
-    private fun getInputsStates() = inputs.map { it.value() }
+    internal open fun update(): Boolean {
+        var old = state
+        compute()
+        return old != state
+    }
+
+    protected var state = logic()
+
+    protected abstract fun logic(): T
 
     protected fun compute() {
         if (!stateChanged()) {
@@ -137,11 +140,7 @@ abstract class Component<T>(var owner: Components<T>, inputs: List<Component<T>>
         state = logic()
     }
 
-    internal open fun update(): Boolean {
-        var old = state
-        compute()
-        return old != state
-    }
+    private fun getInputsStates() = inputs.map { it.value() }
 
     private fun stateChanged(): Boolean {
         if (inputStates.size == 0) {
@@ -166,18 +165,18 @@ class Input<T>(owner: Components<T>, initialState: T) : Component<T>(owner) {
         state = initialState
     }
 
-    override fun logic(): T {
-        return newState
-    }
-
-    private var newState = initialState
-
     fun set(value: T) {
         newState = value
         if (update()) {
             owner.process(this)
         }
     }
+
+    override fun logic(): T {
+        return newState
+    }
+
+    private var newState = initialState
 }
 
 
@@ -185,16 +184,16 @@ class Output<T>(owner: Components<T>, source: Component<T>) : Component<T>(owner
     val source: Component<T>
         get() = inputs[0]
 
-    override fun logic(): T {
-        return source.value()
-    }
-
     override fun update(): Boolean {
-        if (super.update()){
+        if (super.update()) {
             owner.outEvents.push(this)
             return true
         }
         return false
+    }
+
+    override fun logic(): T {
+        return source.value()
     }
 }
 
@@ -205,7 +204,6 @@ class Not(owner: Logic, source: Component<Boolean>) : Component<Boolean>(owner, 
     override fun logic(): Boolean {
         return !source.value()
     }
-
 }
 
 class Xor(owner: Logic, inputs0: Component<Boolean>, input1: Component<Boolean>) :
