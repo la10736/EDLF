@@ -1,7 +1,6 @@
 package edlf
 
 import graph.*
-import kotlin.reflect.jvm.internal.impl.javax.inject.Inject
 
 /**
  * Logic is our logic schema. Provide methods to create logic components and
@@ -51,7 +50,7 @@ class ProcessAlgorithm<T>(changedNode: Input<T>){
     fun process() {
         while (toProcess.isNotEmpty()) {
             var node = toProcess.removeAt(0)
-            toProcess.addAll(node.processChanged(this))
+            toProcess.addAll(processNode(node))
         }
     }
 
@@ -61,6 +60,21 @@ class ProcessAlgorithm<T>(changedNode: Input<T>){
 
     fun processableNode(node: Component<T>): Boolean {
         return sourcesMap[node]!!.isEmpty()
+    }
+
+    fun processNode(node: Component<T>): Collection<Component<T>>{
+        var changedComponents = mutableListOf<Component<T>>()
+        for (child in node.dependedComponents()){
+            processWire(node, child)
+            if (processableNode(child)) {
+                if (child.update()){
+                    changedComponents.add(child)
+                }else{
+                    processAllWire(child)
+                }
+            }
+        }
+        return changedComponents
     }
 
     fun processAllWire(node: Component<T>) {
@@ -113,22 +127,6 @@ abstract class Component<T>(var owner: Components<T>, inputs: List<Component<T>>
         return node.bfsEdges()
     }
 
-    open internal fun processChanged(algorithm: ProcessAlgorithm<T>):
-            Collection<Component<T>>{
-        var changedComponents = mutableListOf<Component<T>>()
-        for (child in dependedComponents()){
-            algorithm.processWire(this, child)
-            if (algorithm.processableNode(child)) {
-                if (child.update()){
-                    changedComponents.add(child)
-                }else{
-                    algorithm.processAllWire(child)
-                }
-            }
-        }
-        return changedComponents
-    }
-
     private fun getInputsStates() = inputs.map { it.value() }
 
     protected fun compute() {
@@ -139,7 +137,7 @@ abstract class Component<T>(var owner: Components<T>, inputs: List<Component<T>>
         state = logic()
     }
 
-    internal fun update(): Boolean {
+    internal open fun update(): Boolean {
         var old = state
         compute()
         return old != state
@@ -191,10 +189,12 @@ class Output<T>(owner: Components<T>, source: Component<T>) : Component<T>(owner
         return source.value()
     }
 
-    override fun processChanged(algorithm: ProcessAlgorithm<T>):
-            Collection<Component<T>>{
-        owner.outEvents.push(this)
-        return emptyList()
+    override fun update(): Boolean {
+        if (super.update()){
+            owner.outEvents.push(this)
+            return true
+        }
+        return false
     }
 }
 
@@ -250,7 +250,7 @@ class ChangeEvents<T>() {
     }
 
     internal fun push(node: Output<T>) {
-        queue.add(Event<T>(node, node.value()))
+        queue.add(Event(node, node.value()))
     }
 
 }
